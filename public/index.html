@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Desk Client</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+      }
+      th,
+      td {
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        text-align: left;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Desk Client</h1>
+    <form id="loginForm">
+      <label>
+        Pilih Device:
+        <select id="deviceSelect">
+          <option value="device-a">Device A</option>
+          <option value="device-b">Device B</option>
+        </select>
+      </label>
+      <button type="submit">Login</button>
+    </form>
+
+    <div id="checkinSection" style="display: none">
+      <hr />
+      <form id="checkinForm">
+        <label>Nama: <input type="text" id="nameInput" required /></label>
+        <label>Room ID: <input type="number" id="roomInput" required /></label>
+        <button type="submit">Check-in</button>
+      </form>
+
+      <h2>Check-in Log</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th>Room</th>
+            <th>Device</th>
+            <th>Waktu</th>
+          </tr>
+        </thead>
+        <tbody id="logTable"></tbody>
+      </table>
+    </div>
+
+    <script>
+      let currentUUID = null;
+      const socket = io();
+
+      // Pasang listener realtime HANYA sekali
+      socket.on("checkin:new", (data) => {
+        appendRow(data);
+      });
+
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          currentUUID = document.getElementById("deviceSelect").value;
+          socket.emit("register-device", currentUUID);
+          document.getElementById("checkinSection").style.display = "block";
+
+          // 🔄 Fetch all local checkins
+          try {
+            const res = await fetch(`/checkins?uuid=${currentUUID}`);
+            const checkins = await res.json();
+            const tbody = document.getElementById("logTable");
+            tbody.innerHTML = ""; // bersihkan log lama
+
+            checkins.forEach(appendRow);
+          } catch (err) {
+            alert("Gagal load data lokal device");
+          }
+        });
+
+      document
+        .getElementById("checkinForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const name = document.getElementById("nameInput").value;
+          const room_id = parseInt(document.getElementById("roomInput").value);
+
+          try {
+            const res = await fetch("/checkin", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Device-UUID": currentUUID,
+              },
+              body: JSON.stringify({ name, room_id }),
+            });
+
+            const json = await res.json();
+            if (!json.success) alert("Check-in failed");
+          } catch (err) {
+            alert("Check-in error");
+          }
+        });
+
+      function appendRow(data) {
+        const tbody = document.getElementById("logTable");
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${data.name}</td>
+            <td>${data.room_id}</td>
+            <td>${data.device_uuid}</td>
+            <td>${new Date(data.created_at).toLocaleString()}</td>
+          `;
+        // tbody.prepend(tr);
+        tbody.insertBefore(tr, tbody.firstChild);
+      }
+    </script>
+  </body>
+</html>
